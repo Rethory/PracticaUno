@@ -1,0 +1,110 @@
+---
+- name: Instalación de Apache2 y MySQL
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Actualizar lista de paquetes
+      apt:
+        update_cache: yes
+
+    - name: Instalación de Apache2 y MySQL
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - apache2
+        - mysql-server
+        - mysql-client
+
+- name: Instalación de módulos de PHP y creación de directorio web
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Instalación de módulos PHP y MySQL
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - libapache2-mod-php
+        - php-mysql
+
+    - name: Crear directorio para la página web
+      file:
+        path: /var/www/html/jnajera.com
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+- name: Configuración del VirtualHost .com
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Creación de configuración del VirtualHost
+      template:
+        src: jnajera.com.conf
+        dest: /etc/apache2/sites-available/jnajera.com.conf
+      notify:
+        - Habilitar VirtualHost
+
+- name: Configuración del VirtualHost app.
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Creación de configuración del VirtualHost
+      template:
+        src: app.jnajera.com.conf
+        dest: /etc/apache2/sites-available/app.jnajera.com.conf
+      notify:
+        - Habilitar VirtualHost
+
+- name: Creación de usuario 'javiernajera' con privilegios de administrador
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Crear usuario 'javiernajera'
+      user:
+        name: javiernajera
+        password: "{{ 'javiernajera' | password_hash('sha512') }}"
+        state: present
+        groups: sudo
+        append: yes
+
+- name: Eliminar cuentas anónimas y base de datos de prueba
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Eliminar cuentas anónimas y base de datos de prueba
+      mysql_db:
+        name: test
+        state: absent
+      ignore_errors: yes
+
+- name: Creación de una base de datos
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Crear una base de datos
+      mysql_db:
+        name: mascotas
+        state: present
+        collation: utf8_general_ci
+        encoding: utf8
+
+- name: Importación del esquema de base de datos
+  mysql_db:
+    name: mascotas
+    state: import
+    target: /etc/ansible/mascotas.sql
+    tags: [database]
+
+- name: Configuración del firewall
+  hosts: javiernajera
+  become: yes
+  tasks:
+    - name: Permitir conexiones entrantes al puerto 80 (HTTP)
+      ufw:
+        rule: allow
+        port: 80
+        proto: tcp
+      ignore_errors: yes
